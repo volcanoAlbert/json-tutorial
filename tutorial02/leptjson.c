@@ -3,6 +3,8 @@
 #include <stdlib.h>  /* NULL, strtod() */
 
 #define EXPECT(c, ch)       do { assert(*c->json == (ch)); c->json++; } while(0)
+#define ISDIGITT(ch)        ((ch) >= '0' && (ch) <= '9')
+#define ISDIGIT1TO9(ch)     ((ch) >= '1' && (ch) <= '9')
 
 typedef struct {
     const char* json;
@@ -30,13 +32,33 @@ static int lept_parse_literal(lept_context* c, lept_value* v, const char* litera
 }
 
 static int lept_parse_number(lept_context* c, lept_value* v) {
-    char* end;
-    /* \TODO validate number */
-    v->n = strtod(c->json, &end);
-    if (c->json == end)
-        return LEPT_PARSE_INVALID_VALUE;
-    c->json = end;
+    const char* p = c->json;
+    /* only do the validate here, do not consider its value */
+    /* sign */
+    if (*p == '-')  ++p;
+    /* int */
+    if (*p == '0')  ++p;
+    else {
+        if (!(ISDIGIT1TO9(*p)))     return LEPT_PARSE_INVALID_VALUE;
+        for (p++; ISDIGITT(*p); p++);
+    }
+    /* frac */
+    if (*p == '.') {
+        p++;
+        if (!(ISDIGITT(*p)))        return LEPT_PARSE_INVALID_VALUE;
+        for (p++; ISDIGITT(*p); p++);
+    }
+    /* exp */
+    if (*p == 'e' || *p == 'E') {
+        p++;
+        if (*p == '+' || *p == '-') p++;
+        if (!(ISDIGITT(*p)))        return LEPT_PARSE_INVALID_VALUE;
+        for (p++; ISDIGITT(*p); p++);
+    }    
+
+    v->n = strtod(c->json, NULL);
     v->type = LEPT_NUMBER;
+    c->json = p;
     return LEPT_PARSE_OK;
 }
 
@@ -61,6 +83,9 @@ int lept_parse(lept_value* v, const char* json) {
     lept_parse_whitespace(&c);
     if ((ret = lept_parse_value(&c, v)) == LEPT_PARSE_OK) {
         lept_parse_whitespace(&c);
+        /* the verify of if some illegal part follow the number is done here */
+        /* for example: the end of the number test */
+        /* if (*p != '\0')                 return LEPT_PARSE_INVALID_VALUE; */
         if (*c.json != '\0') {
             v->type = LEPT_NULL;
             ret = LEPT_PARSE_ROOT_NOT_SINGULAR;
